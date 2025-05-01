@@ -1,0 +1,30 @@
+<!DOCTYPE html>
+<html>
+<head>
+    <meta charset="utf-8">
+    <title>GPX Track Viewer</title>
+    <link rel="stylesheet" href="https://unpkg.com/leaflet@1.9.3/dist/leaflet.css"/>
+    <style>
+        #map { height: 100vh; width: 100vw; }
+    </style>
+</head>
+<body>
+<div id="map"></div>
+
+<script src="https://unpkg.com/leaflet@1.9.3/dist/leaflet.js"></script>
+<script>
+    const map = L.map('map').setView([0, 0], 13);
+    L.tileLayer('https://tile.openstreetmap.org/{z}/{x}/{y}.png', {
+        attribution: '&copy; OpenStreetMap contributors'
+    }).addTo(map);
+
+    fetch('track.json')
+        .then(res => res.json())
+        .then(track => {
+            const latlngs = track.map(p => [p.lat, p.lon]);
+            const polyline = L.polyline(latlngs, { color: 'blue' }).addTo(map);
+            map.fitBounds(polyline.getBounds());
+        });
+</script>
+</body>
+</html>
