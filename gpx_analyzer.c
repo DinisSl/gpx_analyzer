@@ -182,7 +182,7 @@ bool process_arguments(int argc, char* argv[], char* file_path, size_t path_size
         return false;
     }
     snprintf(file_path, path_size,
-             "C:\\Users\\dinis\\Coding\\VSCode\\running\\gpx\\%s.gpx",
+             "C:\\Users\\dinis\\Coding\\VSCode\\gpx\\%s.gpx",
              argv[1]);
     return true;
 }
