@@ -1,6 +1,5 @@
 #include "gpx_analyzer.h"
 
-// Helper function to safely allocate memory
 static void* safe_malloc(size_t size) {
     void* ptr = malloc(size);
     if (!ptr) {
@@ -10,7 +9,6 @@ static void* safe_malloc(size_t size) {
     return ptr;
 }
 
-// Helper function to safely open a file
 static FILE* safe_fopen(const char* filename, const char* mode) {
     FILE* fp = fopen(filename, mode);
     if (!fp) {
@@ -18,6 +16,16 @@ static FILE* safe_fopen(const char* filename, const char* mode) {
         exit(EXIT_FAILURE);
     }
     return fp;
+}
+
+static void handle_xml_error(XML_Parser parser, FILE* file, void* points) {
+    fprintf(stderr, "Error: XML parse error at line %lu: %s\n",
+            XML_GetCurrentLineNumber(parser),
+            XML_ErrorString(XML_GetErrorCode(parser)));
+    XML_ParserFree(parser);
+    fclose(file);
+    free(points);
+    exit(EXIT_FAILURE);
 }
 
 static void start_element(void *data, const char *el, const char **attr) {
@@ -50,8 +58,13 @@ static void end_element(void *data, const char *el) {
     } else if (state->in_trkpt &&
                (strcmp(el, "trkpt") == 0 || strcmp(el, "gpx:trkpt") == 0)) {
         if (state->num_points >= state->capacity) {
-            fprintf(stderr, "Error: Exceeded maximum number of track points.\n");
-            exit(EXIT_FAILURE);
+            state->capacity *= 2;
+            TrackPoint* tmp = realloc(state->points, state->capacity * sizeof(TrackPoint));
+            if (!tmp) {
+                fprintf(stderr, "Error: Memory reallocation failed.\n");
+                exit(EXIT_FAILURE);
+            }
+            state->points = tmp;
         }
         state->points[state->num_points++] = state->current_point;
         state->in_trkpt = false;
@@ -67,17 +80,19 @@ static void char_data(void *data, const char *content, int len) {
 
 TrackPoint* parse_gpx_file(const char* file_path, size_t* out_num_points) {
     FILE *file = safe_fopen(file_path, "r");
-
     XML_Parser parser = XML_ParserCreate(NULL);
+    
     if (!parser) {
         fprintf(stderr, "Error: Could not create XML parser.\n");
         fclose(file);
         exit(EXIT_FAILURE);
     }
 
-    ParserState state = { .points = safe_malloc(MAX_POINTS * sizeof(TrackPoint)),
-                          .num_points = 0, .capacity = MAX_POINTS,
-                          .in_trkpt = false, .in_time = false };
+    ParserState state = {
+        .points = safe_malloc(MAX_POINTS * sizeof(TrackPoint)),
+        .capacity = MAX_POINTS
+    };
+
     XML_SetUserData(parser, &state);
     XML_SetElementHandler(parser, start_element, end_element);
     XML_SetCharacterDataHandler(parser, char_data);
@@ -85,17 +100,12 @@ TrackPoint* parse_gpx_file(const char* file_path, size_t* out_num_points) {
     char buffer[BUFFER_SIZE];
     size_t len;
     int done;
+
     do {
         len = fread(buffer, 1, sizeof(buffer), file);
         done = len < sizeof(buffer);
         if (XML_Parse(parser, buffer, (int)len, done) == XML_STATUS_ERROR) {
-            fprintf(stderr, "Error: XML parse error at line %lu: %s\n",
-                    XML_GetCurrentLineNumber(parser),
-                    XML_ErrorString(XML_GetErrorCode(parser)));
-            XML_ParserFree(parser);
-            fclose(file);
-            free(state.points);
-            exit(EXIT_FAILURE);
+            handle_xml_error(parser, file, state.points);
         }
     } while (!done);
 
@@ -106,6 +116,7 @@ TrackPoint* parse_gpx_file(const char* file_path, size_t* out_num_points) {
     return state.points;
 }
 
+// ... Rest of the implementation remains the same ...
 // Use only geodesic_distance; haversine removed
 double geodesic_distance(double lat1, double lon1, double lat2, double lon2) {
     static struct geod_geodesic g;
@@ -329,7 +340,7 @@ void plot_splits(const Split* splits, size_t split_count, int split_distance) {
         fprintf(gnuplot, "plot '-' using 1:2 with linespoints title 'Splits'\n");
     }
 
-    for (size_t i = 0; i < split_count; i++) {
+    for (size_t i = 0; i < split_count - 1; i++) {
         if (split_distance >= 500) {
             char time_str[16];
             format_time(time_str, sizeof(time_str), splits[i].time);
