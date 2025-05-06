@@ -116,8 +116,6 @@ TrackPoint* parse_gpx_file(const char* file_path, size_t* out_num_points) {
     return state.points;
 }
 
-// ... Rest of the implementation remains the same ...
-// Use only geodesic_distance; haversine removed
 double geodesic_distance(double lat1, double lon1, double lat2, double lon2) {
     static struct geod_geodesic g;
     static int initialized = 0;
@@ -193,7 +191,7 @@ bool process_arguments(int argc, char* argv[], char* file_path, size_t path_size
         return false;
     }
     snprintf(file_path, path_size,
-             "C:\\Users\\dinis\\Coding\\VSCode\\gpx\\%s.gpx",
+             "C:\\Users\\dinis\\Coding\\VSCode\\gpx\\%s",
              argv[1]);
     return true;
 }
@@ -334,9 +332,14 @@ void plot_splits(const Split* splits, size_t split_count, int split_distance) {
         fprintf(gnuplot, "set ylabel 'Time (mm:ss)'\n");
         fprintf(gnuplot, "set timefmt '%%M:%%S'\n");
         fprintf(gnuplot, "set ydata time\n");
-        fprintf(gnuplot, "plot '-' using 1:(strptime('%%M:%%S', strcol(2))) with linespoints title 'Splits'\n");
+        // <<< add this to invert the Y axis
+        fprintf(gnuplot, "set yrange [*:*] reverse\n");
+        fprintf(gnuplot, "plot '-' using 1:(strptime('%%M:%%S', strcol(2))) "
+                         "with linespoints title 'Splits'\n");
     } else {
         fprintf(gnuplot, "set ylabel 'Time (s)'\n");
+        // <<< same inversion here
+        fprintf(gnuplot, "set yrange [*:*] reverse\n");
         fprintf(gnuplot, "plot '-' using 1:2 with linespoints title 'Splits'\n");
     }
 
@@ -353,6 +356,7 @@ void plot_splits(const Split* splits, size_t split_count, int split_distance) {
     fprintf(gnuplot, "e\n");
     pclose(gnuplot);
 }
+
 
 double calculate_total_distance(const TrackPoint *points, size_t num_points) {
     double total_distance = 0.0;

@@ -1,200 +1,109 @@
-# Execution Tree for `gpx_analyzer.c`
+# GPX Analyzer Documentation
 
-## **1. `main`**
-**Purpose**: Entry point of the program.
-
-### **Steps**:
-1. **Initialize Variables**:
-   - `track_points`, `splits`, `precomputed`, `file_path`, `num_points`, `split_distance`, `split_count`.
-
-2. **Validate Arguments**:
-   - Ensures the correct number of arguments is provided.
-   - Validates that the split distance is a positive integer.
-
-3. **Process Arguments**:
-   - Calls `process_arguments` to construct the file path for the GPX file.
-
-4. **Load Track Points**:
-   - Calls `load_track_points`.
-     - Internally calls `parse_gpx_file`.
-       - Uses `start_element`, `end_element`, and `char_data` for XML parsing.
-
-5. **Calculate Splits**:
-   - Calls `calculate_and_validate_splits`.
-     - Internally calls `calculate_splits`.
-       - Uses `geodesic_distance` for distance calculations.
-
-6. **Precompute Metrics**:
-   - Calls `precompute_time_metrics`.
-     - Uses `calculate_pace` and `convert_seconds` for time and pace calculations.
-
-7. **Generate Reports**:
-   - Calls `generate_reports`.
-     - Internally calls:
-       - `calculate_total_distance`.
-       - `convert_seconds`.
-       - `calculate_pace`.
-       - `print_split_report`.
-       - `plot_splits`.
-       - `print_summary`.
-
-8. **Write JSON**:
-   - Calls `write_trackpoints_json` to export track points to a JSON file.
-
-9. **Cleanup Resources**:
-   - Calls `cleanup_resources` to free all allocated memory.
+This document describes the structure and functionality of [`gpx_analyzer.c`](running/gpx_analyzer.c), a C program for analyzing GPX (GPS Exchange Format) files, calculating running splits, and generating reports and plots.
 
 ---
 
-## **2. `process_arguments`**
-**Purpose**: Validates and processes command-line arguments.
+## Overview
 
-### **Steps**:
-- Checks if `argc` is valid.
-- Constructs the file path for the GPX file.
+The program parses a GPX file, extracts track points (latitude, longitude, and timestamp), calculates distance and time splits, computes pace metrics, generates a summary report, and exports the track points to a JSON file. It also plots split times using Gnuplot.
 
 ---
 
-## **3. `load_track_points`**
-**Purpose**: Loads track points from the GPX file.
+## Main Components
 
-### **Steps**:
-1. Calls `parse_gpx_file`.
-   - Opens the GPX file.
-   - Initializes the XML parser (`expat`).
-   - Reads the file in chunks and processes XML elements using:
-     - **`start_element`**:
-       - Handles `<trkpt>` and `<time>` elements.
-       - Extracts latitude, longitude, and time.
-     - **`end_element`**:
-       - Finalizes track points when a `<trkpt>` element ends.
-       - Resizes the `points` array dynamically.
-     - **`char_data`**:
-       - Captures text data (e.g., time values).
-2. Returns the parsed track points.
+### 1. **Memory and File Utilities**
+- `safe_malloc(size_t size)`: Allocates memory, exits on failure.
+- `safe_fopen(const char* filename, const char* mode)`: Opens a file, exits on failure.
 
----
+### 2. **XML Parsing**
+- Uses Expat XML parser.
+- **Handlers:**
+  - `start_element`: Handles `<trkpt>` and `<time>` elements, extracts latitude, longitude, and prepares for time extraction.
+  - `end_element`: Finalizes track points and parses time.
+  - `char_data`: Collects character data for time elements.
 
-## **4. `calculate_and_validate_splits`**
-**Purpose**: Calculates and validates splits based on track points and split distance.
+### 3. **GPX Parsing**
+- `parse_gpx_file(const char* file_path, size_t* out_num_points)`: 
+  - Opens and parses the GPX file.
+  - Returns an array of `TrackPoint` structs.
 
-### **Steps**:
-1. Calls `calculate_splits`.
-   - Iterates through the track points.
-   - Calculates distances between consecutive points using `geodesic_distance`.
-   - Splits the track into segments based on the split distance.
-   - Handles edge cases (e.g., invalid time differences or excessive speed).
-2. Returns an array of splits.
+### 4. **Distance Calculation**
+- `geodesic_distance(double lat1, double lon1, double lat2, double lon2)`: 
+  - Uses the geodesic library for accurate distance calculation between two coordinates.
 
----
+### 5. **Time Parsing**
+- `parse_time(const char *time_str)`: 
+  - Parses ISO 8601 time strings from GPX files into seconds since epoch.
 
-## **5. `precompute_time_metrics`**
-**Purpose**: Precomputes time metrics for splits.
+### 6. **Split Calculation**
+- `calculate_splits(const TrackPoint* points, size_t num_points, int split_distance, size_t* split_count)`: 
+  - Divides the track into segments of a given distance.
+  - Handles edge cases (e.g., invalid time differences, excessive speed).
 
-### **Steps**:
-1. Allocates memory for:
-   - `split_paces`.
-   - `cumulative_times`.
-   - `cumulative_paces`.
-2. Iterates through the splits to calculate:
-   - Split paces using `calculate_pace`.
-   - Cumulative times using `convert_seconds`.
-   - Cumulative paces using `calculate_pace`.
+### 7. **Pace and Time Metrics**
+- `convert_seconds(double total_seconds)`: Converts seconds to a `Time` struct (minutes, seconds).
+- `calculate_pace(double total_time, double total_distance)`: Calculates pace per kilometer.
+- `precompute_time_metrics(...)`: Precomputes split paces, cumulative times, and cumulative paces.
 
----
+### 8. **Reporting and Plotting**
+- `print_split_report(...)`: Prints a table of splits, times, and paces.
+- `plot_splits(...)`: Plots split times using Gnuplot.
+- `print_summary(...)`: Prints total distance, time, and average pace.
 
-## **6. `generate_reports`**
-**Purpose**: Generates and displays reports for the track.
+### 9. **JSON Export**
+- `write_trackpoints_json(const char* filename, const TrackPoint* points, size_t count)`: 
+  - Exports track points to a JSON file.
 
-### **Steps**:
-1. Calculates total distance using `calculate_total_distance`.
-2. Calculates total time and average pace using `convert_seconds` and `calculate_pace`.
-3. Calls:
-   - **`print_split_report`**:
-     - Prints a detailed table of splits, times, and paces.
-   - **`plot_splits`**:
-     - Uses Gnuplot to plot the splits.
-   - **`print_summary`**:
-     - Prints the total distance, time, and average pace.
+### 10. **Resource Cleanup**
+- `cleanup_resources(...)`: Frees all allocated memory.
 
 ---
 
-## **7. `write_trackpoints_json`**
-**Purpose**: Exports track points to a JSON file.
+## Program Flow
 
-### **Steps**:
-1. Opens the JSON file for writing.
-2. Iterates through the track points.
-   - Formats each point as a JSON object with `lat`, `lon`, and `time`.
-3. Writes the JSON array to the file.
-
----
-
-## **8. `cleanup_resources`**
-**Purpose**: Frees all allocated memory.
-
-### **Steps**:
-- Frees:
-  - `track_points`.
-  - `splits`.
-  - `precomputed->split_paces`.
-  - `precomputed->cumulative_times`.
-  - `precomputed->cumulative_paces`.
+1. **Argument Validation:** Checks for correct usage and valid split distance.
+2. **File Path Construction:** Builds the GPX file path from arguments.
+3. **GPX Parsing:** Loads track points from the GPX file.
+4. **Split Calculation:** Calculates distance/time splits.
+5. **Metric Precomputation:** Computes pace and cumulative metrics.
+6. **Report Generation:** Prints split tables and summary, plots splits.
+7. **JSON Export:** Writes track points to `track.json`.
+8. **Cleanup:** Frees all allocated resources.
 
 ---
 
-## **Detailed Function Dependencies**
+## Example Usage
 
-### **`parse_gpx_file`**
-- **Depends on**:
-  - `start_element`.
-  - `end_element`.
-  - `char_data`.
+```sh
+./gpx_analyzer <gpx_file_name_without_extension> <split_distance_in_meters>
+```
 
-### **`calculate_splits`**
-- **Depends on**:
-  - `geodesic_distance`.
-
-### **`precompute_time_metrics`**
-- **Depends on**:
-  - `calculate_pace`.
-  - `convert_seconds`.
-
-### **`generate_reports`**
-- **Depends on**:
-  - `calculate_total_distance`.
-  - `convert_seconds`.
-  - `calculate_pace`.
-  - `print_split_report`.
-  - `plot_splits`.
-  - `print_summary`.
-
-### **`write_trackpoints_json`**
-- **Depends on**:
-  - JSON formatting logic.
+Example:
+```sh
+./gpx_analyzer tres_mil_1024 1000
+```
 
 ---
 
-## Expanded Execution Tree
-main
-+-- process_arguments
-+-- load_track_points
-|   +-- parse_gpx_file
-|       +-- start_element
-|       +-- end_element
-|       +-- char_data
-+-- calculate_and_validate_splits
-|   +-- calculate_splits
-|       +-- geodesic_distance
-+-- precompute_time_metrics
-|   +-- calculate_pace
-|   +-- convert_seconds
-+-- generate_reports
-|   +-- calculate_total_distance
-|   +-- convert_seconds
-|   +-- calculate_pace
-|   +-- print_split_report
-|   +-- plot_splits
-|   +-- print_summary
-+-- write_trackpoints_json
-+-- cleanup_resources
+## File Structure
+
+- [`gpx_analyzer.c`](running/gpx_analyzer.c): Main implementation file.
+- [`gpx_analyzer.h`](running/gpx_analyzer.h): Header file with type and function declarations.
+- `gpx/`: Directory containing GPX files.
+- `track.json`: Output JSON file with track points.
+
+---
+
+## Dependencies
+
+- [Expat XML Parser](https://libexpat.github.io/)
+- [GeographicLib](https://geographiclib.sourceforge.io/) (for geodesic calculations)
+- [Gnuplot](http://www.gnuplot.info/) (for plotting splits)
+
+---
+
+## See Also
+
+- [gpx_analyzer.h](running/gpx_analyzer.h) for type definitions and function declarations.
+- [README.md](running/README.md) for an execution tree and further details.
